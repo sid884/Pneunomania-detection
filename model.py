@@ -1,145 +1,83 @@
 import warnings
-from PIL import Image, ImageEnhance
+from PIL import Image
 warnings.filterwarnings('ignore')
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.applications.vgg16 import preprocess_input
 from tensorflow.keras.preprocessing import image
 import numpy as np
-
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QFileDialog
-from PyQt5.QtGui import QMovie
-from PyQt5.QtWidgets import QMessageBox
-
+import streamlit as st
 from gtts import gTTS
-import pygame
 import os
+import pygame
+
+# Initialize pygame mixer to play the audio
+pygame.mixer.init()
 
 def speak(text):
     # Convert the text to speech using gTTS
     tts = gTTS(text=text, lang='en', slow=False)
     
-    # Save the speech as an MP3 file in a directory
+    # Save the speech as an MP3 file
     speech_file = "output_speech.mp3"
     tts.save(speech_file)
     
-    # Initialize pygame to play the saved speech file
-    pygame.mixer.init()
+    # Load and play the speech
     pygame.mixer.music.load(speech_file)
-    
-    # Play the speech file
     pygame.mixer.music.play()
     
     # Wait until the audio finishes playing
     while pygame.mixer.music.get_busy():
         pygame.time.Clock().tick(10)
     
+    # Stop and unload the music, then remove the MP3 file
+    pygame.mixer.music.stop()
+    pygame.mixer.music.unload()  # This releases the file so it can be deleted
+    
     # Remove the MP3 file after playback
     os.remove(speech_file)
 
-class Ui_MainWindow(object):
-    def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(695, 609)
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.frame = QtWidgets.QFrame(self.centralwidget)
-        self.frame.setGeometry(QtCore.QRect(0, 0, 701, 611))
-        self.frame.setStyleSheet("background-color: #035874;")
-        self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame.setObjectName("frame")
-        
-        self.label = QtWidgets.QLabel(self.frame)
-        self.label.setGeometry(QtCore.QRect(80, -60, 541, 561))
-        self.label.setText("")
-        self.gif = QMovie("picture.gif")
-        self.label.setMovie(self.gif)
-        self.gif.start()
-        self.label.setObjectName("label")
-        
-        self.label_2 = QtWidgets.QLabel(self.frame)
-        self.label_2.setGeometry(QtCore.QRect(80, 430, 591, 41))
-        font = QtGui.QFont()
-        font.setPointSize(24)
-        font.setBold(True)
-        font.setWeight(75)
-        self.label_2.setFont(font)
-        self.label_2.setObjectName("label_2")
-        
-        self.pushButton = QtWidgets.QPushButton(self.frame)
-        self.pushButton.setGeometry(QtCore.QRect(30, 530, 201, 31))
-        font = QtGui.QFont()
-        font.setPointSize(12)
-        font.setBold(True)
-        font.setWeight(75)
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("Lung.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        MainWindow.setWindowIcon(icon)
-        self.pushButton.setFont(font)
-        self.pushButton.setStyleSheet("QPushButton{border-radius: 10px; background-color:#DF582C;} QPushButton:hover { background-color: #7D93E0;}")
-        self.pushButton.setObjectName("pushButton")
-        
-        self.pushButton_2 = QtWidgets.QPushButton(self.frame)
-        self.pushButton_2.setGeometry(QtCore.QRect(450, 530, 201, 31))
-        font = QtGui.QFont()
-        font.setPointSize(12)
-        font.setBold(True)
-        font.setWeight(75)
-        self.pushButton_2.setFont(font)
-        self.pushButton_2.setStyleSheet("QPushButton{border-radius: 10px; background-color:#DF582C;} QPushButton:hover { background-color: #7D93E0;}")
-        self.pushButton_2.setObjectName("pushButton_2")
-        
-        MainWindow.setCentralWidget(self.centralwidget)
+def load_image(image_file):
+    img = Image.open(image_file)
+    return img
 
-        self.retranslateUi(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
-        self.pushButton.clicked.connect(self.upload_image)
-        self.pushButton_2.clicked.connect(self.predict_result)
+def predict_pneumonia(model, img_path):
+    img_file = image.load_img(img_path, target_size=(224, 224))
+    x = image.img_to_array(img_file)
+    x = np.expand_dims(x, axis=0)
+    img_data = preprocess_input(x)
+    prediction = model.predict(img_data)
+    return prediction
 
-    def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "PNEUMONIA Detection Apps"))
-        self.label_2.setText(_translate("MainWindow", "Chest X-ray PNEUMONIA Detection"))
-        self.pushButton.setText(_translate("MainWindow", "Upload Image"))
-        self.pushButton_2.setText(_translate("MainWindow", "Prediction"))
+# Streamlit UI
 
-    def upload_image(self):
-        filename = QFileDialog.getOpenFileName()
-        path = filename[0]
-        path = str(path)
-        print(path)
+# Set the page title and header
+st.set_page_config(page_title="PNEUMONIA Detection App", layout="centered")
+st.title("Chest X-ray PNEUMONIA Detection")
 
-        # Display the uploaded image
-        pixmap = QtGui.QPixmap(path)
-        self.label.setPixmap(pixmap.scaled(self.label.width(), self.label.height(), QtCore.Qt.KeepAspectRatio))
+# Upload Image Section
+uploaded_image = st.file_uploader("Upload Chest X-ray Image", type=['png', 'jpg', 'jpeg'])
 
-        model = load_model('chest_xray.h5') 
-        img_file = image.load_img(path, target_size=(224, 224))
-        x = image.img_to_array(img_file)
-        x = np.expand_dims(x, axis=0)
-        img_data = preprocess_input(x)
-        classes = model.predict(img_data)
+if uploaded_image is not None:
+    # Display uploaded image
+    img = load_image(uploaded_image)
+    st.image(img, caption="Uploaded Image", use_column_width=True)
+
+    # Save the uploaded image temporarily
+    with open("temp_image.png", "wb") as f:
+        f.write(uploaded_image.getbuffer())
+
+    # Load the pre-trained model
+    model = load_model('chest_xray.h5')
+
+    # Predict result on button click
+    if st.button("Predict"):
+        result = predict_pneumonia(model, "temp_image.png")
         
-        global result
-        result = classes
-
-    def predict_result(self):
-        print(result)
+        # Check the prediction and display result
         if result[0][0] > 0.5:
-            print("Result is Normal")
+            st.success("Result: Normal")
             speak("Result is Normal")
         else:
-            print("Affected By PNEUMONIA")
-            speak("Affected By PNEUMONIA")
-
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
-    
-    sys.exit(app.exec_())
+            st.error("Result: Affected by PNEUMONIA")
+            speak("Affected by PNEUMONIA")
