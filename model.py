@@ -17,25 +17,13 @@ def speak(text):
     # Save the speech as an MP3 file
     speech_file = "output_speech.mp3"
     tts.save(speech_file)
+    
+    # Play the audio in the Streamlit app
+    audio_file = open(speech_file, 'rb')
+    audio_bytes = audio_file.read()
+    st.audio(audio_bytes, format='audio/mp3')
 
-    # Attempt to play audio; handle cases where there's no audio device
-    try:
-        import pygame
-        pygame.mixer.init()
-        pygame.mixer.music.load(speech_file)
-        pygame.mixer.music.play()
-
-        # Wait until the audio finishes playing
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
-        
-        # Stop and unload the music
-        pygame.mixer.music.stop()
-        pygame.mixer.music.unload()  # This releases the file so it can be deleted
-    except Exception as e:
-        print(f"Error playing sound: {e}. Audio playback skipped.")
-
-    # Remove the MP3 file after playback
+    # Clean up the saved file
     os.remove(speech_file)
 
 # Streamlit UI setup
